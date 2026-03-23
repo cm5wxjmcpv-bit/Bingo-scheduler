@@ -67,7 +67,7 @@ function renderEvents() {
     return;
   }
   eventsListEl.innerHTML = state.events.map((eventData) => `
-    <button class="event-card" data-event-id="${eventData.eventId}" style="text-align:left;">
+    <button type="button" class="event-card selectable-event ${state.selectedEvent?.event?.eventId === eventData.eventId ? 'is-selected' : ''}" data-event-id="${eventData.eventId}">
       <strong>${escapeHtml(eventData.eventName)}</strong>
       <div class="event-meta">${formatDateTime(eventData.eventDate, eventData.startTime, eventData.endTime)}</div>
       <div class="small muted">${eventData.filledSlots}/${eventData.totalSlots} filled</div>
@@ -83,6 +83,9 @@ async function openEventDetails(eventId) {
   try {
     const data = await api.getEventAvailableRoles(eventId, session.userId);
     state.selectedEvent = data;
+    eventsListEl.querySelectorAll('[data-event-id]').forEach((button) => {
+      button.classList.toggle('is-selected', button.dataset.eventId === eventId);
+    });
     eventDetailEl.classList.remove('hidden');
     eventTitleEl.textContent = data.event.eventName;
     eventMetaEl.textContent = formatDateTime(data.event.eventDate, data.event.startTime, data.event.endTime);
