@@ -152,7 +152,7 @@ function getActiveEvents(payload) {
     .filter((eventRow) => eventRow.status === 'active')
     .sort(sortByEventDate_)
     .map((eventRow) => {
-      const roles = parseJson_(eventRow.rolesSnapshotJson, []);
+      const roles = parseEventRoles_(eventRow);
       const activeAssignments = getActiveAssignmentsForEvent_(eventRow.eventId);
       return {
         eventId: eventRow.eventId,
@@ -176,7 +176,7 @@ function getEventAvailableRoles(payload) {
   const eventRow = requireEvent_(eventId);
   if (eventRow.status !== 'active') throw new Error('Event is archived');
 
-  const roles = parseJson_(eventRow.rolesSnapshotJson, []);
+  const roles = parseEventRoles_(eventRow);
   const activeAssignments = getActiveAssignmentsForEvent_(eventId);
   const takenSlotIds = activeAssignments.map((a) => a.roleSlotId);
   const currentAssignment = activeAssignments.find((a) => a.userId === userId) || null;
@@ -214,7 +214,7 @@ function assignUserToRole(payload) {
       throw new Error('Role slot is already filled');
     }
 
-    const roles = parseJson_(eventRow.rolesSnapshotJson, []);
+    const roles = parseEventRoles_(eventRow);
     const role = roles.find((r) => r.roleSlotId === roleSlotId);
     if (!role) throw new Error('Role slot not found');
 
@@ -363,6 +363,7 @@ function createEvent(payload) {
     templateId: payload.templateId || '',
     templateNameSnapshot: templateNameSnapshot,
     rolesSnapshotJson: JSON.stringify(roles),
+    rolesJson: JSON.stringify(roles),
     status: 'active',
     createdAt: nowIso(),
     updatedAt: nowIso(),
@@ -378,7 +379,7 @@ function updateEvent(payload) {
   requireActiveAdmin_(payload.adminId);
   const eventId = required_(payload.eventId, 'eventId required');
   const eventRow = requireEvent_(eventId);
-  const roles = cleanRoles_(payload.roles || parseJson_(eventRow.rolesSnapshotJson, []));
+  const roles = cleanRoles_(payload.roles || parseEventRoles_(eventRow));
   if (!roles.length) throw new Error('At least one role slot is required');
 
   let templateNameSnapshot = eventRow.templateNameSnapshot || '';
@@ -394,6 +395,7 @@ function updateEvent(payload) {
     templateId: payload.templateId || '',
     templateNameSnapshot: templateNameSnapshot,
     rolesSnapshotJson: JSON.stringify(roles),
+    rolesJson: JSON.stringify(roles),
     updatedAt: nowIso(),
     notes: payload.notes !== undefined ? payload.notes : eventRow.notes
   });
@@ -549,7 +551,7 @@ function sanitizeAdmin_(row) {
 }
 
 function adminEventSummary_(eventRow) {
-  const roles = parseJson_(eventRow.rolesSnapshotJson, []);
+  const roles = parseEventRoles_(eventRow);
   const assignments = getActiveAssignmentsForEvent_(eventRow.eventId);
   return {
     eventId: eventRow.eventId,
@@ -564,6 +566,10 @@ function adminEventSummary_(eventRow) {
     filledSlots: assignments.length,
     totalSlots: roles.length
   };
+}
+
+function parseEventRoles_(eventRow) {
+  return cleanRoles_(parseJson_(eventRow.rolesSnapshotJson || eventRow.rolesJson, []));
 }
 
 function cleanRoles_(roles) {
@@ -638,7 +644,7 @@ function readRows_(sheet) {
   const headers = values[0];
   return values.slice(1).map((row) => {
     const obj = {};
-    headers.forEach((header, i) => obj[String(header)] = row[i]);
+    headers.forEach((header, i) => obj[String(header).trim()] = row[i]);
     return obj;
   });
 }
@@ -670,7 +676,7 @@ function updateRow_(sheet, keyColumn, keyValue, updates) {
 
 function getHeaders_(sheet) {
   if (sheet.getLastRow() === 0) return [];
-  return sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map((h) => String(h));
+  return sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map((h) => String(h).trim());
 }
 
 function writeAudit_(actorType, actorId, actionType, targetType, targetId, details) {
