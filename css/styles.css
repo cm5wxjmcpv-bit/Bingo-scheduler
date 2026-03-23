@@ -109,7 +109,126 @@ button.event-card.is-selected .muted { color: #fff; }
   .split { grid-template-columns: repeat(2, minmax(0,1fr)); }
 }
 
+.admin-tabs {
+  display: flex;
+  gap: .5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.admin-tab {
+  background: #e5eaf7;
+  color: #31426a;
+}
+
+.admin-tab.is-active {
+  background: var(--primary);
+  color: #fff;
+}
+
+.admin-tab-panel {
+  display: block;
+}
+
+.section-subtitle {
+  margin-top: .4rem;
+  color: var(--muted);
+  font-size: .95rem;
+}
+
+.operational-card {
+  background: #fbfcff;
+}
+
+.roles-stack {
+  display: grid;
+  gap: .45rem;
+  margin-top: .65rem;
+}
+
+.role-row {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: .55rem .65rem;
+}
+
+.role-row.is-open {
+  background: #f8fafc;
+}
+
+.role-row.is-filled {
+  background: #eff6ff;
+}
+
+.assignment-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: .75rem;
+}
+
+.assignment-actions {
+  display: grid;
+  gap: .4rem;
+  min-width: 220px;
+}
+
+.people-grid {
+  align-items: start;
+}
+
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 31, 57, .45);
+  z-index: 999;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.loading-panel {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  padding: 1rem 1.2rem;
+  display: inline-flex;
+  align-items: center;
+  gap: .7rem;
+  box-shadow: var(--shadow);
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 3px solid #dbe4ff;
+  border-top-color: var(--primary);
+  border-radius: 999px;
+  animation: spin .9s linear infinite;
+}
+
+.small-spinner {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .hidden { display: none !important; }
 hr { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
 .small { font-size: .85rem; }
 .inline { display: flex; align-items: center; gap: .4rem; }
+
+@media (max-width: 700px) {
+  .assignment-card {
+    display: block;
+  }
+
+  .assignment-actions {
+    margin-top: .6rem;
+    min-width: 0;
+  }
+}
