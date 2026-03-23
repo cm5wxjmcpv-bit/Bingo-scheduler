@@ -132,9 +132,9 @@ function getUserAssignments(payload) {
         assignmentId: row.assignmentId,
         eventId: row.eventId,
         eventName: eventRow.eventName,
-        eventDate: eventRow.eventDate,
-        startTime: eventRow.startTime,
-        endTime: eventRow.endTime,
+        eventDate: normalizeEventDateValue_(eventRow.eventDate),
+        startTime: normalizeEventTimeValue_(eventRow.startTime),
+        endTime: normalizeEventTimeValue_(eventRow.endTime),
         roleName: row.roleName
       };
     })
@@ -157,9 +157,9 @@ function getActiveEvents(payload) {
       return {
         eventId: eventRow.eventId,
         eventName: eventRow.eventName,
-        eventDate: eventRow.eventDate,
-        startTime: eventRow.startTime,
-        endTime: eventRow.endTime,
+        eventDate: normalizeEventDateValue_(eventRow.eventDate),
+        startTime: normalizeEventTimeValue_(eventRow.startTime),
+        endTime: normalizeEventTimeValue_(eventRow.endTime),
         totalSlots: roles.length,
         filledSlots: activeAssignments.length
       };
@@ -280,7 +280,7 @@ function adminLogin(payload) {
 
 function getAdminDashboardData(payload) {
   const admin = requireActiveAdmin_(payload.adminId);
-  const templates = readRows_(getSheet_(SHEETS.TEMPLATES));
+  const templates = readRows_(getSheet_(SHEETS.TEMPLATES)).map(normalizeTemplateSummary_);
   const events = readRows_(getSheet_(SHEETS.EVENTS)).sort(sortByStatusThenDate_).map(adminEventSummary_);
   const admins = readRows_(getSheet_(SHEETS.ADMINS)).map(sanitizeAdmin_);
   return { admin: sanitizeAdmin_(admin), templates: templates, events: events, admins: admins };
@@ -518,9 +518,9 @@ function publicEvent_(eventRow) {
   return {
     eventId: eventRow.eventId,
     eventName: eventRow.eventName,
-    eventDate: eventRow.eventDate,
-    startTime: eventRow.startTime,
-    endTime: eventRow.endTime
+    eventDate: normalizeEventDateValue_(eventRow.eventDate),
+    startTime: normalizeEventTimeValue_(eventRow.startTime),
+    endTime: normalizeEventTimeValue_(eventRow.endTime)
   };
 }
 
@@ -554,9 +554,9 @@ function adminEventSummary_(eventRow) {
   return {
     eventId: eventRow.eventId,
     eventName: eventRow.eventName,
-    eventDate: eventRow.eventDate,
-    startTime: eventRow.startTime,
-    endTime: eventRow.endTime,
+    eventDate: normalizeEventDateValue_(eventRow.eventDate),
+    startTime: normalizeEventTimeValue_(eventRow.startTime),
+    endTime: normalizeEventTimeValue_(eventRow.endTime),
     templateId: eventRow.templateId || '',
     templateNameSnapshot: eventRow.templateNameSnapshot || '',
     rolesSnapshotJson: eventRow.rolesSnapshotJson,
@@ -753,4 +753,58 @@ function sortByStatusThenDate_(a, b) {
   if (a.status === 'active') return -1;
   if (b.status === 'active') return 1;
   return sortByEventDate_(a, b);
+}
+
+function normalizeTemplateSummary_(templateRow) {
+  return Object.assign({}, templateRow, {
+    startTime: normalizeEventTimeValue_(templateRow.startTime),
+    endTime: normalizeEventTimeValue_(templateRow.endTime)
+  });
+}
+
+function normalizeEventDateValue_(value) {
+  if (value === undefined || value === null || value === '') return '';
+  if (value instanceof Date) {
+    const normalized = Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    logDateTimeNormalization_('eventDate', value, normalized);
+    return normalized;
+  }
+  const text = String(value).trim();
+  const isoDatePrefix = text.match(/^(\d{4}-\d{2}-\d{2})[T\s].*$/);
+  if (isoDatePrefix) {
+    const normalized = isoDatePrefix[1];
+    logDateTimeNormalization_('eventDate', value, normalized);
+    return normalized;
+  }
+  logDateTimeNormalization_('eventDate', value, text);
+  return text;
+}
+
+function normalizeEventTimeValue_(value) {
+  if (value === undefined || value === null || value === '') return '';
+  if (value instanceof Date) {
+    const normalized = Utilities.formatDate(value, Session.getScriptTimeZone(), 'HH:mm');
+    logDateTimeNormalization_('eventTime', value, normalized);
+    return normalized;
+  }
+  const text = String(value).trim();
+  const hhmm24 = text.match(/^([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/);
+  if (hhmm24) {
+    const normalized = hhmm24[1].padStart(2, '0') + ':' + hhmm24[2];
+    logDateTimeNormalization_('eventTime', value, normalized);
+    return normalized;
+  }
+  const isoTime = text.match(/T(\d{2}:\d{2})(?::\d{2}(?:\.\d{1,3})?)?Z?$/);
+  if (isoTime) {
+    const normalized = isoTime[1];
+    logDateTimeNormalization_('eventTime', value, normalized);
+    return normalized;
+  }
+  logDateTimeNormalization_('eventTime', value, text);
+  return text;
+}
+
+function logDateTimeNormalization_(field, original, normalized) {
+  const originalDisplay = original instanceof Date ? original.toISOString() : String(original);
+  Logger.log('[normalize] %s original=%s normalized=%s', field, originalDisplay, normalized);
 }
