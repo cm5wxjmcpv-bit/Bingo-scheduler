@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bingo Scheduler - Events</title>
+  <link rel="stylesheet" href="./css/styles.css" />
+</head>
+<body>
+  <main class="container">
+    <header class="page-header">
+      <h1>My Bingo Events</h1>
+      <div class="actions">
+        <button id="refresh-btn" class="secondary tiny">Refresh</button>
+        <button id="logout-btn" class="secondary tiny">Sign Out</button>
+      </div>
+    </header>
+
+    <section class="card">
+      <h2>My Sign-Ups</h2>
+      <div id="my-signups" class="list"></div>
+    </section>
+
+    <section class="card" style="margin-top: 1rem;">
+      <h2>Active Upcoming Events</h2>
+      <div id="events-list" class="list"></div>
+    </section>
+
+    <section id="event-detail" class="card hidden" style="margin-top: 1rem;">
+      <h3 id="event-title">Event Details</h3>
+      <p id="event-meta" class="event-meta"></p>
+      <div id="event-current-assignment" class="muted small"></div>
+      <div id="event-roles" class="list"></div>
+      <div id="detail-message" class="message"></div>
+    </section>
+  </main>
+  <script type="module" src="./js/events.js"></script>
+</body>
+</html>

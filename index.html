@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bingo Scheduler - Sign In</title>
+  <link rel="stylesheet" href="./css/styles.css" />
+</head>
+<body>
+  <main class="container">
+    <header class="page-header">
+      <h1>Bingo Scheduler</h1>
+      <a href="./admin.html" class="muted">Admin</a>
+    </header>
+
+    <section class="card" style="max-width: 560px; margin: 0 auto;">
+      <h2>Sign in</h2>
+      <p class="muted small">No password needed for players.</p>
+      <form id="entry-form">
+        <div class="form-row">
+          <label for="firstName">First Name</label>
+          <input id="firstName" name="firstName" required autocomplete="given-name" />
+        </div>
+        <div class="form-row">
+          <label for="lastName">Last Name</label>
+          <input id="lastName" name="lastName" required autocomplete="family-name" />
+        </div>
+        <div class="form-row">
+          <label for="phone">Phone Number</label>
+          <input id="phone" name="phone" required autocomplete="tel" />
+        </div>
+        <button type="submit">Continue</button>
+        <div id="entry-message" class="message"></div>
+      </form>
+    </section>
+  </main>
+  <script type="module" src="./js/index.js"></script>
+</body>
+</html>
