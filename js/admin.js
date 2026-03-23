@@ -11,7 +11,7 @@ const eventMessage = document.getElementById('event-message');
 const assignmentMessage = document.getElementById('assignment-message');
 
 let session = loadStorage(CONFIG.storageKeys.adminSession);
-let dashboardData = { templates: [], events: [], admins: [] };
+let dashboardData = { templates: [], events: [], admins: [], users: [] };
 let templateRoles = [];
 let eventRoles = [];
 
@@ -99,6 +99,7 @@ async function loadDashboardData() {
     renderTemplates();
     renderEvents();
     renderAdmins();
+    renderUsers();
     renderTemplateOptions();
     renderAssignmentEventOptions();
     await loadAssignmentsForSelectedEvent();
@@ -136,7 +137,8 @@ async function loadAssignmentsForSelectedEvent() {
   list.innerHTML = data.assignments.map((a) => `
     <div class="event-card">
       <strong>${escapeHtml(a.roleName)}</strong>
-      <div class="event-meta">${escapeHtml(a.userDisplay)}</div>
+      <div class="event-meta">${escapeHtml(a.userDisplay || 'Unknown User')}</div>
+      <div class="small muted">${escapeHtml(a.phoneRaw || 'No phone')}</div>
       <div class="actions">
         <button class="tiny danger" data-admin-remove="${a.assignmentId}">Remove</button>
       </div>
@@ -418,4 +420,20 @@ function renderAdmins() {
       await loadDashboardData();
     });
   });
+}
+
+
+function renderUsers() {
+  const list = document.getElementById('users-list');
+  if (!list) return;
+  list.innerHTML = dashboardData.users.map((user) => {
+    const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Unknown User';
+    return `
+      <div class="event-card">
+        <strong>${escapeHtml(fullName)}</strong>
+        <div class="event-meta">${escapeHtml(user.phoneRaw || '')}</div>
+        <div class="small muted">${user.active ? 'Active' : 'Inactive'}</div>
+      </div>
+    `;
+  }).join('') || '<p class="muted">No users.</p>';
 }
