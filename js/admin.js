@@ -18,24 +18,34 @@ let eventRoles = [];
 function normalizeTimeForInput(value) {
   if (!value) return '';
   const normalized = String(value).trim();
-  const hhmm24 = normalized.match(/^([01]?\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/);
+
+  const hhmm24 = normalized.match(/^([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/);
   if (hhmm24) {
     return `${hhmm24[1].padStart(2, '0')}:${hhmm24[2]}`;
   }
-  const hhmm12 = normalized.match(/^(1[0-2]|0?[1-9]):([0-5]\d)\s*([AaPp][Mm])$/);
-  if (!hhmm12) return '';
-  let hours = Number(hhmm12[1]);
-  const minutes = hhmm12[2];
-  const meridiem = hhmm12[3].toUpperCase();
-  if (meridiem === 'AM' && hours === 12) hours = 0;
-  if (meridiem === 'PM' && hours !== 12) hours += 12;
-  return `${String(hours).padStart(2, '0')}:${minutes}`;
+
+  const hhmm12 = normalized.match(/^(1[0-2]|0?[1-9]):([0-5]\d)(?::([0-5]\d))?\s*([AaPp][Mm])$/);
+  if (hhmm12) {
+    let hours = Number(hhmm12[1]);
+    const minutes = hhmm12[2];
+    const meridiem = hhmm12[4].toUpperCase();
+    if (meridiem === 'AM' && hours === 12) hours = 0;
+    if (meridiem === 'PM' && hours !== 12) hours += 12;
+    return `${String(hours).padStart(2, '0')}:${minutes}`;
+  }
+
+  return '';
 }
 
 function normalizeDateForInput(value) {
   if (!value) return '';
   const normalized = String(value).trim();
+
   if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return normalized;
+
+  const isoDatePrefix = normalized.match(/^(\d{4}-\d{2}-\d{2})[T\s].*$/);
+  if (isoDatePrefix) return isoDatePrefix[1];
+
   const mdy = normalized.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (mdy) {
     const month = Number(mdy[1]);
@@ -45,6 +55,7 @@ function normalizeDateForInput(value) {
       return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     }
   }
+
   const parsed = new Date(normalized);
   if (Number.isNaN(parsed.getTime())) return '';
   return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
