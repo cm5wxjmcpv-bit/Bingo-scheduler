@@ -7,6 +7,13 @@
   <link rel="stylesheet" href="./css/styles.css" />
 </head>
 <body>
+  <div id="admin-loading-overlay" class="loading-overlay hidden" aria-live="polite" aria-busy="true">
+    <div class="loading-panel">
+      <div class="spinner" aria-hidden="true"></div>
+      <p id="admin-loading-text">Loading admin dashboard…</p>
+    </div>
+  </div>
+
   <main class="container">
     <header class="page-header">
       <h1>Admin Dashboard</h1>
@@ -29,81 +36,99 @@
         <button id="admin-logout" class="secondary tiny">Sign Out</button>
       </div>
 
-      <div class="grid grid-2">
-        <section class="card">
-          <h2>Template Manager</h2>
-          <form id="template-form">
-            <input type="hidden" id="template-id" />
-            <div class="form-row"><label>Template Name</label><input id="template-name" required /></div>
-            <div class="split">
-              <div class="form-row"><label>Day of Week</label><input id="template-day" /></div>
-              <div class="form-row"><label>Start Time</label><input id="template-start" type="time" /></div>
-            </div>
-            <div class="split">
-              <div class="form-row"><label>End Time</label><input id="template-end" type="time" /></div>
-              <div class="form-row"><label>Description</label><input id="template-description" /></div>
-            </div>
-            <div class="form-row">
-              <label>Roles</label>
-              <div class="inline">
-                <input id="template-role-input" placeholder="Add role slot" />
-                <button type="button" id="add-template-role" class="tiny">Add</button>
+      <nav class="admin-tabs" role="tablist" aria-label="Admin sections">
+        <button type="button" class="admin-tab is-active" data-tab="main-setup" role="tab" aria-selected="true">Main / Setup</button>
+        <button type="button" class="admin-tab" data-tab="active-events" role="tab" aria-selected="false">Active Events</button>
+        <button type="button" class="admin-tab" data-tab="assignment-manager" role="tab" aria-selected="false">Assignment Manager</button>
+        <button type="button" class="admin-tab" data-tab="people" role="tab" aria-selected="false">People</button>
+      </nav>
+
+      <section id="tab-main-setup" class="admin-tab-panel">
+        <div class="grid grid-2">
+          <section class="card">
+            <h2>Template Manager</h2>
+            <form id="template-form">
+              <input type="hidden" id="template-id" />
+              <div class="form-row"><label>Template Name</label><input id="template-name" required /></div>
+              <div class="split">
+                <div class="form-row"><label>Day of Week</label><input id="template-day" /></div>
+                <div class="form-row"><label>Start Time</label><input id="template-start" type="time" /></div>
               </div>
-            </div>
-            <div id="template-role-chips" class="role-chips"></div>
-            <div class="actions">
-              <button type="submit">Save Template</button>
-              <button type="button" id="template-reset" class="secondary">Clear</button>
-            </div>
-            <div id="template-message" class="message"></div>
-          </form>
-        </section>
-
-        <section class="card">
-          <h2>Create / Edit Event</h2>
-          <form id="event-form">
-            <input type="hidden" id="event-id" />
-            <div class="form-row"><label>Event Name</label><input id="event-name" required /></div>
-            <div class="split">
-              <div class="form-row"><label>Date</label><input id="event-date" type="date" required /></div>
-              <div class="form-row"><label>Template</label><select id="event-template"></select></div>
-            </div>
-            <div class="split">
-              <div class="form-row"><label>Start Time</label><input id="event-start" type="time" required /></div>
-              <div class="form-row"><label>End Time</label><input id="event-end" type="time" required /></div>
-            </div>
-            <div class="form-row">
-              <label>Role Slots</label>
-              <div class="inline">
-                <input id="event-role-input" placeholder="Add role slot" />
-                <button type="button" id="add-event-role" class="tiny">Add</button>
+              <div class="split">
+                <div class="form-row"><label>End Time</label><input id="template-end" type="time" /></div>
+                <div class="form-row"><label>Description</label><input id="template-description" /></div>
               </div>
-            </div>
-            <div id="event-role-chips" class="role-chips"></div>
-            <div class="actions">
-              <button type="submit">Save Event</button>
-              <button type="button" id="event-reset" class="secondary">Clear</button>
-            </div>
-            <div id="event-message" class="message"></div>
-          </form>
-        </section>
-      </div>
+              <div class="form-row">
+                <label>Roles</label>
+                <div class="inline">
+                  <input id="template-role-input" placeholder="Add role slot" />
+                  <button type="button" id="add-template-role" class="tiny">Add</button>
+                </div>
+              </div>
+              <div id="template-role-chips" class="role-chips"></div>
+              <div class="actions">
+                <button type="submit">Save Template</button>
+                <button type="button" id="template-reset" class="secondary">Clear</button>
+              </div>
+              <div id="template-message" class="message"></div>
+            </form>
+          </section>
 
-      <div class="grid grid-2" style="margin-top:1rem;">
-        <section class="card">
-          <h2>Templates</h2>
-          <div id="templates-list" class="list"></div>
-        </section>
-        <section class="card">
-          <h2>Active Events</h2>
-          <div id="active-events-list" class="list"></div>
-          <hr />
-          <h3>Archived Events</h3>
-          <div id="archived-events-list" class="list"></div>
-        </section>
-      </div>
+          <section class="card">
+            <h2>Create / Edit Event</h2>
+            <form id="event-form">
+              <input type="hidden" id="event-id" />
+              <div class="form-row"><label>Event Name</label><input id="event-name" required /></div>
+              <div class="split">
+                <div class="form-row"><label>Date</label><input id="event-date" type="date" required /></div>
+                <div class="form-row"><label>Template</label><select id="event-template"></select></div>
+              </div>
+              <div class="split">
+                <div class="form-row"><label>Start Time</label><input id="event-start" type="time" required /></div>
+                <div class="form-row"><label>End Time</label><input id="event-end" type="time" required /></div>
+              </div>
+              <div class="form-row">
+                <label>Role Slots</label>
+                <div class="inline">
+                  <input id="event-role-input" placeholder="Add role slot" />
+                  <button type="button" id="add-event-role" class="tiny">Add</button>
+                </div>
+              </div>
+              <div id="event-role-chips" class="role-chips"></div>
+              <div class="actions">
+                <button type="submit">Save Event</button>
+                <button type="button" id="event-reset" class="secondary">Clear</button>
+              </div>
+              <div id="event-message" class="message"></div>
+            </form>
+          </section>
+        </div>
 
-      <div class="grid grid-2" style="margin-top:1rem;">
+        <div class="grid grid-2" style="margin-top:1rem;">
+          <section class="card">
+            <h2>Templates</h2>
+            <div id="templates-list" class="list"></div>
+          </section>
+          <section class="card">
+            <h2>Event Editor / List</h2>
+            <h3 class="section-subtitle">Active Events</h3>
+            <div id="active-events-list" class="list"></div>
+            <hr />
+            <h3 class="section-subtitle">Archived Events</h3>
+            <div id="archived-events-list" class="list"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="tab-active-events" class="admin-tab-panel hidden">
+        <section class="card">
+          <h2>Active Events Operational View</h2>
+          <p class="muted">Quick scan of filled and open role slots.</p>
+          <div id="active-events-operational" class="list"></div>
+        </section>
+      </section>
+
+      <section id="tab-assignment-manager" class="admin-tab-panel hidden">
         <section class="card">
           <h2>Assignment Manager</h2>
           <div class="form-row">
@@ -113,33 +138,39 @@
           <div id="assignments-list" class="list"></div>
           <div id="assignment-message" class="message"></div>
         </section>
+      </section>
 
-        <section class="card">
-          <h2>Admin Manager</h2>
-          <form id="admin-form">
-            <input type="hidden" id="managed-admin-id" />
-            <div class="split">
-              <div class="form-row"><label>Display Name</label><input id="managed-admin-display" required /></div>
-              <div class="form-row"><label>Username</label><input id="managed-admin-username" required /></div>
-            </div>
-            <div class="split">
-              <div class="form-row"><label>Email</label><input id="managed-admin-email" type="email" required /></div>
-              <div class="form-row"><label>New Password</label><input id="managed-admin-password" type="password" /></div>
-            </div>
-            <div class="form-row"><label>Notes</label><input id="managed-admin-notes" /></div>
-            <div class="actions">
-              <button type="submit">Save Admin</button>
-              <button type="button" id="admin-reset" class="secondary">Clear</button>
-            </div>
-          </form>
-          <div id="admin-message" class="message"></div>
-          <hr />
-          <div id="admins-list" class="list"></div>
-          <hr />
-          <h3>Users</h3>
-          <div id="users-list" class="list"></div>
-        </section>
-      </div>
+      <section id="tab-people" class="admin-tab-panel hidden">
+        <div class="grid grid-2 people-grid">
+          <section class="card">
+            <h2>Admin Management</h2>
+            <form id="admin-form">
+              <input type="hidden" id="managed-admin-id" />
+              <div class="split">
+                <div class="form-row"><label>Display Name</label><input id="managed-admin-display" required /></div>
+                <div class="form-row"><label>Username</label><input id="managed-admin-username" required /></div>
+              </div>
+              <div class="split">
+                <div class="form-row"><label>Email</label><input id="managed-admin-email" type="email" required /></div>
+                <div class="form-row"><label>New Password</label><input id="managed-admin-password" type="password" /></div>
+              </div>
+              <div class="form-row"><label>Notes</label><input id="managed-admin-notes" /></div>
+              <div class="actions">
+                <button type="submit">Save Admin</button>
+                <button type="button" id="admin-reset" class="secondary">Clear</button>
+              </div>
+            </form>
+            <div id="admin-message" class="message"></div>
+            <hr />
+            <div id="admins-list" class="list"></div>
+          </section>
+
+          <section class="card">
+            <h2>Users</h2>
+            <div id="users-list" class="list"></div>
+          </section>
+        </div>
+      </section>
     </section>
   </main>
   <script type="module" src="./js/admin.js"></script>

@@ -283,7 +283,16 @@ function getAdminDashboardData(payload) {
   const templates = readRows_(getSheet_(SHEETS.TEMPLATES)).map(normalizeTemplateSummary_);
   const events = readRows_(getSheet_(SHEETS.EVENTS)).sort(sortByStatusThenDate_).map(adminEventSummary_);
   const admins = readRows_(getSheet_(SHEETS.ADMINS)).map(sanitizeAdmin_);
-  return { admin: sanitizeAdmin_(admin), templates: templates, events: events, admins: admins };
+  const users = readRows_(getSheet_(SHEETS.USERS)).map(sanitizeUser_);
+  const activeAssignments = readRows_(getSheet_(SHEETS.ASSIGNMENTS)).filter((row) => row.status === 'active');
+  return {
+    admin: sanitizeAdmin_(admin),
+    templates: templates,
+    events: events,
+    admins: admins,
+    users: users,
+    activeAssignments: activeAssignments
+  };
 }
 
 function createTemplate(payload) {
@@ -435,11 +444,53 @@ function adminRemoveAssignment(payload) {
 }
 
 function adminReassignAssignment(payload) {
-  requireActiveAdmin_(payload.adminId);
-  const current = requireAssignment_(payload.assignmentId);
-  if (current.status !== 'active') throw new Error('Assignment already removed');
-  removeAssignmentCore_(payload.adminId, payload.assignmentId, 'admin', payload.adminId);
-  return assignUserToRole({ userId: current.userId, eventId: current.eventId, roleSlotId: payload.toRoleSlotId });
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    requireActiveAdmin_(payload.adminId);
+    const assignmentId = required_(payload.assignmentId, 'assignmentId required');
+    const toRoleSlotId = required_(payload.toRoleSlotId, 'toRoleSlotId required');
+
+    const current = requireAssignment_(assignmentId);
+    if (current.status !== 'active') throw new Error('Assignment already removed');
+
+    const eventRow = requireEvent_(current.eventId);
+    if (eventRow.status !== 'active') throw new Error('Event is archived');
+
+    const roles = parseEventRoles_(eventRow);
+    const destinationRole = roles.find((role) => role.roleSlotId === toRoleSlotId);
+    if (!destinationRole) throw new Error('Destination role slot not found in this event');
+    if (current.roleSlotId === toRoleSlotId) throw new Error('Assignment is already in that role slot');
+
+    const activeAssignments = getActiveAssignmentsForEvent_(current.eventId);
+    if (activeAssignments.some((row) => row.roleSlotId === toRoleSlotId)) {
+      throw new Error('Destination role slot is already filled');
+    }
+
+    const sameUserAssignments = activeAssignments.filter((row) => row.userId === current.userId);
+    if (sameUserAssignments.some((row) => row.assignmentId !== current.assignmentId)) {
+      throw new Error('User already has another assignment for this event');
+    }
+
+    updateRow_(getSheet_(SHEETS.ASSIGNMENTS), 'assignmentId', assignmentId, {
+      roleSlotId: destinationRole.roleSlotId,
+      roleName: destinationRole.roleName,
+      assignedAt: nowIso()
+    });
+
+    writeAudit_('admin', payload.adminId, 'assignment_reassigned', 'assignment', assignmentId, {
+      eventId: current.eventId,
+      fromRoleSlotId: current.roleSlotId,
+      fromRoleName: current.roleName,
+      toRoleSlotId: destinationRole.roleSlotId,
+      toRoleName: destinationRole.roleName,
+      userId: current.userId
+    });
+
+    return { assignmentId: assignmentId };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function createAdmin(payload) {
