@@ -82,6 +82,13 @@ button:disabled { opacity: .6; cursor: not-allowed; }
 
 .list { display: grid; gap: .7rem; }
 .event-card { border: 1px solid var(--border); border-radius: 12px; padding: .8rem; background: #fff; }
+button.event-card { width: 100%; text-align: left; color: var(--text); }
+button.event-card .event-meta,
+button.event-card .muted { color: var(--muted); }
+button.event-card.is-selected { background: var(--primary); border-color: var(--primary); }
+button.event-card.is-selected,
+button.event-card.is-selected .event-meta,
+button.event-card.is-selected .muted { color: #fff; }
 .event-meta { color: var(--muted); font-size: .9rem; margin-bottom: .4rem; }
 .muted { color: var(--muted); }
 
