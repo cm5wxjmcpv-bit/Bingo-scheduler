@@ -43,6 +43,7 @@ const ADMIN_ACTIONS = {
   getEventAssignments,
   adminRemoveAssignment,
   adminReassignAssignment,
+  adminAssignUserToRole,
   createAdmin,
   updateAdmin,
   deactivateAdmin,
@@ -498,6 +499,57 @@ function adminReassignAssignment(payload) {
     });
 
     return { assignmentId: assignmentId };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function adminAssignUserToRole(payload) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    requireActiveAdmin_(payload.adminId);
+    const eventId = required_(payload.eventId, 'eventId required');
+    const userId = required_(payload.userId, 'userId required');
+    const roleSlotId = required_(payload.roleSlotId, 'roleSlotId required');
+
+    const user = requireUser_(userId);
+    const eventRow = requireEvent_(eventId);
+    if (eventRow.status !== 'active') throw new Error('Event is archived');
+
+    const roles = parseEventRoles_(eventRow);
+    const role = roles.find((item) => item.roleSlotId === roleSlotId);
+    if (!role) throw new Error('Role slot not found in this event');
+
+    const activeAssignments = getActiveAssignmentsForEvent_(eventId);
+    if (activeAssignments.some((assignment) => assignment.roleSlotId === roleSlotId)) {
+      throw new Error('Role slot is already filled');
+    }
+    if (activeAssignments.some((assignment) => assignment.userId === userId)) {
+      throw new Error('User already has a role for this event. Move their current assignment instead.');
+    }
+
+    const row = {
+      assignmentId: generateId_('asg'),
+      eventId: eventId,
+      userId: user.userId,
+      roleSlotId: role.roleSlotId,
+      roleName: role.roleName,
+      assignedAt: nowIso(),
+      status: 'active',
+      removedAt: '',
+      removedBy: ''
+    };
+
+    appendRow_(getSheet_(SHEETS.ASSIGNMENTS), row);
+    writeAudit_('admin', payload.adminId, 'assignment_created_by_admin', 'assignment', row.assignmentId, {
+      eventId: eventId,
+      userId: user.userId,
+      roleSlotId: role.roleSlotId,
+      roleName: role.roleName
+    });
+
+    return { assignmentId: row.assignmentId };
   } finally {
     lock.releaseLock();
   }
