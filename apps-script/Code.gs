@@ -45,7 +45,11 @@ const ADMIN_ACTIONS = {
   adminReassignAssignment,
   createAdmin,
   updateAdmin,
-  deactivateAdmin
+  deactivateAdmin,
+  createUserAdmin,
+  updateUserAdmin,
+  deactivateUserAdmin,
+  reactivateUserAdmin
 };
 
 function doGet(e) {
@@ -561,6 +565,133 @@ function deactivateAdmin(payload) {
   return { adminId: adminId };
 }
 
+
+function createUserAdmin(payload) {
+  requireActiveAdmin_(payload.adminId);
+  const firstName = required_(payload.firstName, 'First name is required');
+  const lastName = required_(payload.lastName, 'Last name is required');
+  const phoneRaw = required_(payload.phoneRaw, 'Phone is required');
+
+  const firstNameNormalized = normalizeName_(firstName);
+  const lastNameNormalized = normalizeName_(lastName);
+  const phoneNormalized = normalizePhone_(phoneRaw);
+  if (!phoneNormalized) throw new Error('Phone must contain digits');
+
+  const identityKey = makeIdentityKey_(firstNameNormalized, lastNameNormalized, phoneNormalized);
+  const usersSheet = getSheet_(SHEETS.USERS);
+  const users = readRows_(usersSheet);
+  const existing = users.find((u) => u.identityKey === identityKey);
+
+  if (existing) {
+    if (truthy_(existing.active)) throw new Error('A matching active user already exists');
+    updateRow_(usersSheet, 'userId', existing.userId, {
+      firstName: tidyNameDisplay_(firstName),
+      lastName: tidyNameDisplay_(lastName),
+      firstNameNormalized: firstNameNormalized,
+      lastNameNormalized: lastNameNormalized,
+      phoneRaw: phoneRaw,
+      phoneNormalized: phoneNormalized,
+      identityKey: identityKey,
+      active: true,
+      lastLoginAt: existing.lastLoginAt || ''
+    });
+    writeAudit_('admin', payload.adminId, 'user_reactivated', 'user', existing.userId, { identityKey: identityKey });
+    return { userId: existing.userId };
+  }
+
+  const user = {
+    userId: generateId_('usr'),
+    firstName: tidyNameDisplay_(firstName),
+    lastName: tidyNameDisplay_(lastName),
+    firstNameNormalized: firstNameNormalized,
+    lastNameNormalized: lastNameNormalized,
+    phoneRaw: phoneRaw,
+    phoneNormalized: phoneNormalized,
+    identityKey: identityKey,
+    createdAt: nowIso(),
+    lastLoginAt: '',
+    active: true
+  };
+
+  appendRow_(usersSheet, user);
+  writeAudit_('admin', payload.adminId, 'user_created_by_admin', 'user', user.userId, { identityKey: identityKey });
+  return { userId: user.userId };
+}
+
+function updateUserAdmin(payload) {
+  requireActiveAdmin_(payload.adminId);
+  const userId = required_(payload.userId, 'userId required');
+  const current = readRows_(getSheet_(SHEETS.USERS)).find((u) => u.userId === userId);
+  if (!current) throw new Error('User not found');
+
+  const firstName = required_(payload.firstName !== undefined ? payload.firstName : current.firstName, 'First name is required');
+  const lastName = required_(payload.lastName !== undefined ? payload.lastName : current.lastName, 'Last name is required');
+  const phoneRaw = required_(payload.phoneRaw !== undefined ? payload.phoneRaw : current.phoneRaw, 'Phone is required');
+
+  const firstNameNormalized = normalizeName_(firstName);
+  const lastNameNormalized = normalizeName_(lastName);
+  const phoneNormalized = normalizePhone_(phoneRaw);
+  if (!phoneNormalized) throw new Error('Phone must contain digits');
+
+  const identityKey = makeIdentityKey_(firstNameNormalized, lastNameNormalized, phoneNormalized);
+  const users = readRows_(getSheet_(SHEETS.USERS));
+  const duplicate = users.find((u) => u.userId !== userId && u.identityKey === identityKey && truthy_(u.active));
+  if (duplicate) throw new Error('Another active user already has that name and phone');
+
+  updateRow_(getSheet_(SHEETS.USERS), 'userId', userId, {
+    firstName: tidyNameDisplay_(firstName),
+    lastName: tidyNameDisplay_(lastName),
+    firstNameNormalized: firstNameNormalized,
+    lastNameNormalized: lastNameNormalized,
+    phoneRaw: phoneRaw,
+    phoneNormalized: phoneNormalized,
+    identityKey: identityKey,
+    active: payload.active === undefined ? truthy_(current.active) : truthy_(payload.active)
+  });
+
+  writeAudit_('admin', payload.adminId, 'user_updated_by_admin', 'user', userId, { identityKey: identityKey });
+  return { userId: userId };
+}
+
+function deactivateUserAdmin(payload) {
+  requireActiveAdmin_(payload.adminId);
+  const userId = required_(payload.userId, 'userId required');
+  const user = readRows_(getSheet_(SHEETS.USERS)).find((u) => u.userId === userId);
+  if (!user) throw new Error('User not found');
+
+  updateRow_(getSheet_(SHEETS.USERS), 'userId', userId, { active: false });
+
+  const assignmentSheet = getSheet_(SHEETS.ASSIGNMENTS);
+  const assignments = readRows_(assignmentSheet).filter((a) => a.userId === userId && a.status === 'active');
+  assignments.forEach((assignment) => {
+    updateRow_(assignmentSheet, 'assignmentId', assignment.assignmentId, {
+      status: 'removed',
+      removedAt: nowIso(),
+      removedBy: payload.adminId
+    });
+  });
+
+  writeAudit_('admin', payload.adminId, 'user_deactivated_by_admin', 'user', userId, {
+    activeAssignmentsRemoved: assignments.length
+  });
+  return { userId: userId, activeAssignmentsRemoved: assignments.length };
+}
+
+function reactivateUserAdmin(payload) {
+  requireActiveAdmin_(payload.adminId);
+  const userId = required_(payload.userId, 'userId required');
+  const user = readRows_(getSheet_(SHEETS.USERS)).find((u) => u.userId === userId);
+  if (!user) throw new Error('User not found');
+
+  const identityKey = user.identityKey || makeIdentityKey_(user.firstNameNormalized || normalizeName_(user.firstName), user.lastNameNormalized || normalizeName_(user.lastName), user.phoneNormalized || normalizePhone_(user.phoneRaw));
+  const duplicate = readRows_(getSheet_(SHEETS.USERS)).find((u) => u.userId !== userId && u.identityKey === identityKey && truthy_(u.active));
+  if (duplicate) throw new Error('Another active user already has that name and phone');
+
+  updateRow_(getSheet_(SHEETS.USERS), 'userId', userId, { active: true, identityKey: identityKey });
+  writeAudit_('admin', payload.adminId, 'user_reactivated_by_admin', 'user', userId, { identityKey: identityKey });
+  return { userId: userId };
+}
+
 function removeAssignmentCore_(actorId, assignmentId, actorType, removedBy) {
   const assignment = requireAssignment_(assignmentId);
   if (assignment.status !== 'active') throw new Error('Assignment is already removed');
@@ -781,6 +912,81 @@ function ensureSheets_() {
       existing.appendRow(SHEET_HEADERS[name]);
     }
   });
+
+  repairUsersSheet_();
+}
+
+function repairUsersSheet_() {
+  const sheet = getSheet_(SHEETS.USERS);
+  if (sheet.getLastRow() < 1) return;
+
+  let headers = getHeaders_(sheet);
+
+  // Earlier/manual sheets may have been created with a typo: identitKey instead of identityKey.
+  // That makes every login look like a new person because the backend cannot find identityKey.
+  const typoIdentityIndex = headers.indexOf('identitKey');
+  const identityIndex = headers.indexOf('identityKey');
+
+  if (typoIdentityIndex !== -1 && identityIndex === -1) {
+    sheet.getRange(1, typoIdentityIndex + 1).setValue('identityKey');
+    headers = getHeaders_(sheet);
+  }
+
+  if (headers.indexOf('identityKey') === -1) {
+    const newCol = headers.length + 1;
+    sheet.getRange(1, newCol).setValue('identityKey');
+    headers = getHeaders_(sheet);
+  }
+
+  const requiredHeaders = SHEET_HEADERS[SHEETS.USERS];
+  requiredHeaders.forEach((header) => {
+    if (headers.indexOf(header) === -1) {
+      sheet.getRange(1, sheet.getLastColumn() + 1).setValue(header);
+      headers = getHeaders_(sheet);
+    }
+  });
+
+  if (sheet.getLastRow() < 2) return;
+
+  const headerIndex = {};
+  headers.forEach((header, index) => headerIndex[header] = index);
+
+  const values = sheet.getRange(2, 1, sheet.getLastRow() - 1, headers.length).getValues();
+  let changed = false;
+
+  values.forEach((row) => {
+    const firstName = row[headerIndex.firstName] || '';
+    const lastName = row[headerIndex.lastName] || '';
+    const phoneRaw = row[headerIndex.phoneRaw] || row[headerIndex.phoneNormalized] || '';
+
+    if (headerIndex.firstNameNormalized !== undefined && !row[headerIndex.firstNameNormalized]) {
+      row[headerIndex.firstNameNormalized] = normalizeName_(firstName);
+      changed = true;
+    }
+
+    if (headerIndex.lastNameNormalized !== undefined && !row[headerIndex.lastNameNormalized]) {
+      row[headerIndex.lastNameNormalized] = normalizeName_(lastName);
+      changed = true;
+    }
+
+    if (headerIndex.phoneNormalized !== undefined && !row[headerIndex.phoneNormalized]) {
+      row[headerIndex.phoneNormalized] = normalizePhone_(phoneRaw);
+      changed = true;
+    }
+
+    const firstNormalized = row[headerIndex.firstNameNormalized] || normalizeName_(firstName);
+    const lastNormalized = row[headerIndex.lastNameNormalized] || normalizeName_(lastName);
+    const phoneNormalized = row[headerIndex.phoneNormalized] || normalizePhone_(phoneRaw);
+
+    if (headerIndex.identityKey !== undefined && !row[headerIndex.identityKey]) {
+      row[headerIndex.identityKey] = makeIdentityKey_(firstNormalized, lastNormalized, phoneNormalized);
+      changed = true;
+    }
+  });
+
+  if (changed) {
+    sheet.getRange(2, 1, values.length, headers.length).setValues(values);
+  }
 }
 
 function getSheet_(name) {
