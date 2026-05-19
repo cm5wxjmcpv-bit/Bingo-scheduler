@@ -9,6 +9,7 @@ const adminMessage = document.getElementById('admin-message');
 const templateMessage = document.getElementById('template-message');
 const eventMessage = document.getElementById('event-message');
 const assignmentMessage = document.getElementById('assignment-message');
+const userMessage = document.getElementById('user-message');
 const loadingOverlay = document.getElementById('admin-loading-overlay');
 const loadingText = document.getElementById('admin-loading-text');
 
@@ -521,6 +522,39 @@ function resetAdminForm() {
   document.getElementById('managed-admin-id').value = '';
 }
 
+
+const userForm = document.getElementById('user-form');
+userForm?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const submitButton = userForm.querySelector('button[type="submit"]');
+
+  try {
+    await runWithButtonLoading(submitButton, async () => {
+      const id = document.getElementById('managed-user-id').value;
+      const payload = {
+        adminId: session.adminId,
+        userId: id || undefined,
+        firstName: document.getElementById('managed-user-first').value,
+        lastName: document.getElementById('managed-user-last').value,
+        phoneRaw: document.getElementById('managed-user-phone').value
+      };
+      if (id) await api.updateUserAdmin(payload);
+      else await api.createUserAdmin(payload);
+      setMessage(userMessage, 'User saved', 'success');
+      resetUserForm();
+      await loadDashboardData({ showGlobalLoading: true, loadingText: 'Refreshing users...' });
+    });
+  } catch (error) {
+    setMessage(userMessage, error.message || 'User save failed', 'error');
+  }
+});
+
+document.getElementById('user-reset')?.addEventListener('click', resetUserForm);
+function resetUserForm() {
+  userForm?.reset();
+  document.getElementById('managed-user-id').value = '';
+}
+
 function renderTemplates() {
   const list = document.getElementById('templates-list');
   if (!dashboardData.templates.length) {
@@ -703,14 +737,66 @@ function renderUsers() {
   const list = document.getElementById('users-list');
   if (!list) return;
 
+  const activeAssignmentsByUser = (dashboardData.activeAssignments || []).reduce((acc, assignment) => {
+    acc[assignment.userId] = (acc[assignment.userId] || 0) + 1;
+    return acc;
+  }, {});
+
   list.innerHTML = dashboardData.users.map((user) => {
     const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Unknown User';
+    const assignmentCount = activeAssignmentsByUser[user.userId] || 0;
     return `
       <div class="event-card">
         <strong>${escapeHtml(fullName)}</strong>
         <div class="event-meta">${escapeHtml(user.phoneRaw || '')}</div>
-        <div class="small muted">${user.active ? 'Active' : 'Inactive'}</div>
+        <div class="small muted">${user.active ? 'Active' : 'Inactive'} · ${assignmentCount} active sign-up${assignmentCount === 1 ? '' : 's'}</div>
+        <div class="actions">
+          <button class="tiny secondary" data-edit-user="${user.userId}">Edit</button>
+          ${user.active ? `<button class="tiny danger" data-deactivate-user="${user.userId}">Remove</button>` : `<button class="tiny secondary" data-reactivate-user="${user.userId}">Reactivate</button>`}
+        </div>
       </div>
     `;
   }).join('') || '<p class="muted">No users.</p>';
+
+  list.querySelectorAll('[data-edit-user]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const user = dashboardData.users.find((item) => item.userId === button.dataset.editUser);
+      if (!user) return;
+      document.getElementById('managed-user-id').value = user.userId;
+      document.getElementById('managed-user-first').value = user.firstName || '';
+      document.getElementById('managed-user-last').value = user.lastName || '';
+      document.getElementById('managed-user-phone').value = user.phoneRaw || '';
+      setMessage(userMessage, `Editing ${fullUserName(user)}`, 'info');
+    });
+  });
+
+  list.querySelectorAll('[data-deactivate-user]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const user = dashboardData.users.find((item) => item.userId === button.dataset.deactivateUser);
+      const assignmentCount = activeAssignmentsByUser[button.dataset.deactivateUser] || 0;
+      const warning = assignmentCount ? ` This will also remove ${assignmentCount} active sign-up${assignmentCount === 1 ? '' : 's'}.` : '';
+      if (!window.confirm(`Remove ${fullUserName(user)}?${warning}`)) return;
+
+      await runWithButtonLoading(button, async () => {
+        const result = await api.deactivateUserAdmin({ adminId: session.adminId, userId: button.dataset.deactivateUser });
+        setMessage(userMessage, `User removed. ${result.activeAssignmentsRemoved || 0} active sign-up${result.activeAssignmentsRemoved === 1 ? '' : 's'} removed.`, 'success');
+        resetUserForm();
+        await loadDashboardData({ showGlobalLoading: true, loadingText: 'Refreshing users...' });
+      });
+    });
+  });
+
+  list.querySelectorAll('[data-reactivate-user]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      await runWithButtonLoading(button, async () => {
+        await api.reactivateUserAdmin({ adminId: session.adminId, userId: button.dataset.reactivateUser });
+        setMessage(userMessage, 'User reactivated', 'success');
+        await loadDashboardData({ showGlobalLoading: true, loadingText: 'Refreshing users...' });
+      });
+    });
+  });
+}
+
+function fullUserName(user) {
+  return `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Unknown User';
 }

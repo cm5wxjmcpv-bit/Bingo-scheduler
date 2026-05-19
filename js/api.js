@@ -100,5 +100,17 @@ export const api = {
   },
   deactivateAdmin(input) {
     return request('deactivateAdmin', input);
+  },
+  createUserAdmin(input) {
+    return request('createUserAdmin', input);
+  },
+  updateUserAdmin(input) {
+    return request('updateUserAdmin', input);
+  },
+  deactivateUserAdmin(input) {
+    return request('deactivateUserAdmin', input);
+  },
+  reactivateUserAdmin(input) {
+    return request('reactivateUserAdmin', input);
   }
 };
