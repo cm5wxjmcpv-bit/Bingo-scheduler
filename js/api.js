@@ -92,6 +92,9 @@ export const api = {
   adminReassignAssignment(input) {
     return request('adminReassignAssignment', input);
   },
+  adminAssignUserToRole(input) {
+    return request('adminAssignUserToRole', input);
+  },
   createAdmin(input) {
     return request('createAdmin', input);
   },

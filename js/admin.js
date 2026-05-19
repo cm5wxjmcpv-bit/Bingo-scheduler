@@ -288,6 +288,7 @@ async function loadAssignmentsForSelectedEvent() {
 
   if (!eventId) {
     list.innerHTML = '<p class="muted">No active events available.</p>';
+    renderAddAssignmentControls([], []);
     return;
   }
 
@@ -299,36 +300,42 @@ async function loadAssignmentsForSelectedEvent() {
     const eventSummary = dashboardData.events.find((e) => e.eventId === eventId);
     const roles = parseJsonSafe(eventSummary?.rolesSnapshotJson, []);
     const assignedSlotIds = new Set((data.assignments || []).map((item) => item.roleSlotId));
+    const assignedUserIds = new Set((data.assignments || []).map((item) => item.userId));
     const openRoles = roles.filter((role) => !assignedSlotIds.has(role.roleSlotId));
+    const availableUsers = (dashboardData.users || [])
+      .filter((user) => user.active && !assignedUserIds.has(user.userId))
+      .sort((a, b) => `${a.lastName || ''} ${a.firstName || ''}`.localeCompare(`${b.lastName || ''} ${b.firstName || ''}`));
+
+    renderAddAssignmentControls(openRoles, availableUsers);
 
     if (!data.assignments.length) {
       list.innerHTML = '<p class="muted">No active assignments. All roles are currently open.</p>';
-      return;
+    } else {
+      list.innerHTML = data.assignments.map((assignment) => {
+        const optionsHtml = openRoles.length
+          ? `<option value="">Move to open role...</option>${openRoles.map((role) => `<option value="${escapeHtml(role.roleSlotId)}">${escapeHtml(role.roleName)}</option>`).join('')}`
+          : '<option value="">No open roles available</option>';
+
+        return `
+          <div class="event-card assignment-card">
+            <div>
+              <strong>${escapeHtml(assignment.roleName)}</strong>
+              <div class="event-meta">${escapeHtml(assignment.userDisplay || 'Unknown User')}</div>
+              <div class="small muted">${escapeHtml(assignment.phoneRaw || 'No phone')}</div>
+            </div>
+            <div class="assignment-actions">
+              <select data-move-target="${assignment.assignmentId}" ${openRoles.length ? '' : 'disabled'}>${optionsHtml}</select>
+              <button class="tiny secondary" data-admin-move="${assignment.assignmentId}" ${openRoles.length ? '' : 'disabled'}>Move</button>
+              <button class="tiny danger" data-admin-remove="${assignment.assignmentId}">Remove</button>
+            </div>
+          </div>
+        `;
+      }).join('');
     }
-
-    list.innerHTML = data.assignments.map((assignment) => {
-      const optionsHtml = openRoles.length
-        ? `<option value="">Move to open role...</option>${openRoles.map((role) => `<option value="${escapeHtml(role.roleSlotId)}">${escapeHtml(role.roleName)}</option>`).join('')}`
-        : '<option value="">No open roles available</option>';
-
-      return `
-        <div class="event-card assignment-card">
-          <div>
-            <strong>${escapeHtml(assignment.roleName)}</strong>
-            <div class="event-meta">${escapeHtml(assignment.userDisplay || 'Unknown User')}</div>
-            <div class="small muted">${escapeHtml(assignment.phoneRaw || 'No phone')}</div>
-          </div>
-          <div class="assignment-actions">
-            <select data-move-target="${assignment.assignmentId}" ${openRoles.length ? '' : 'disabled'}>${optionsHtml}</select>
-            <button class="tiny secondary" data-admin-move="${assignment.assignmentId}" ${openRoles.length ? '' : 'disabled'}>Move</button>
-            <button class="tiny danger" data-admin-remove="${assignment.assignmentId}">Remove</button>
-          </div>
-        </div>
-      `;
-    }).join('');
 
     list.querySelectorAll('[data-admin-remove]').forEach((button) => {
       button.addEventListener('click', async () => {
+        if (!window.confirm('Remove this person from the role?')) return;
         await runWithButtonLoading(button, async () => {
           await api.adminRemoveAssignment({ adminId: session.adminId, assignmentId: button.dataset.adminRemove });
           setMessage(assignmentMessage, 'Assignment removed', 'success');
@@ -360,9 +367,57 @@ async function loadAssignmentsForSelectedEvent() {
     });
   } catch (error) {
     list.innerHTML = '<p class="muted">Could not load assignments for this event.</p>';
+    renderAddAssignmentControls([], []);
     setMessage(assignmentMessage, error.message || 'Assignment load failed', 'error');
   }
 }
+
+function renderAddAssignmentControls(openRoles, availableUsers) {
+  const userSelect = document.getElementById('assignment-user-select');
+  const roleSelect = document.getElementById('assignment-role-select');
+  const form = document.getElementById('admin-add-assignment-form');
+  if (!userSelect || !roleSelect || !form) return;
+
+  userSelect.innerHTML = availableUsers.length
+    ? '<option value="">Choose person...</option>' + availableUsers.map((user) => {
+      const name = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Unnamed User';
+      const phone = user.phoneRaw ? ` - ${user.phoneRaw}` : '';
+      return `<option value="${escapeHtml(user.userId)}">${escapeHtml(name + phone)}</option>`;
+    }).join('')
+    : '<option value="">No available active users</option>';
+
+  roleSelect.innerHTML = openRoles.length
+    ? '<option value="">Choose open role...</option>' + openRoles.map((role) => `<option value="${escapeHtml(role.roleSlotId)}">${escapeHtml(role.roleName)}</option>`).join('')
+    : '<option value="">No open roles</option>';
+
+  const disabled = !availableUsers.length || !openRoles.length;
+  userSelect.disabled = disabled;
+  roleSelect.disabled = disabled;
+  const submitButton = form.querySelector('button[type="submit"]');
+  if (submitButton) submitButton.disabled = disabled;
+}
+
+const addAssignmentForm = document.getElementById('admin-add-assignment-form');
+addAssignmentForm?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const eventId = selectedAssignmentEventId || document.getElementById('assignment-event-select')?.value || '';
+  const userId = document.getElementById('assignment-user-select')?.value || '';
+  const roleSlotId = document.getElementById('assignment-role-select')?.value || '';
+  if (!eventId || !userId || !roleSlotId) {
+    setMessage(assignmentMessage, 'Choose an event, person, and open role.', 'error');
+    return;
+  }
+
+  const submitButton = addAssignmentForm.querySelector('button[type="submit"]');
+  await runWithButtonLoading(submitButton, async () => {
+    await api.adminAssignUserToRole({ adminId: session.adminId, eventId, userId, roleSlotId });
+    setMessage(assignmentMessage, 'Person added to role', 'success');
+    addAssignmentForm.reset();
+    await loadDashboardData();
+    await loadAssignmentsForSelectedEvent();
+    renderOperationalActiveEvents();
+  });
+});
 
 function roleChip(roleName, index) {
   return `<span class="chip">${escapeHtml(roleName)} <button data-index="${index}" class="secondary tiny" type="button">x</button></span>`;
