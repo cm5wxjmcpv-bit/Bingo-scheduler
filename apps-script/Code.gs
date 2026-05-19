@@ -20,6 +20,8 @@ const SHEET_HEADERS = {
 
 const PUBLIC_ACTIONS = {
   createOrFindUser,
+  createOrFindUserWithData,
+  getUserHomeData,
   getUserAssignments,
   getActiveEvents,
   getEventAvailableRoles,
@@ -113,6 +115,18 @@ function createOrFindUser(payload) {
   return sanitizeUser_(user);
 }
 
+function createOrFindUserWithData(payload) {
+  const user = createOrFindUser(payload);
+  const homeData = buildUserHomeData_(user.userId);
+  return Object.assign({ user: user }, homeData);
+}
+
+function getUserHomeData(payload) {
+  const userId = required_(payload.userId, 'userId required');
+  requireUser_(userId);
+  return buildUserHomeData_(userId);
+}
+
 function getUserProfile(payload) {
   const user = requireUser_(payload.userId);
   return sanitizeUser_(user);
@@ -147,25 +161,7 @@ function getUserAssignments(payload) {
 function getActiveEvents(payload) {
   const userId = required_(payload.userId, 'userId required');
   requireUser_(userId);
-
-  const events = readRows_(getSheet_(SHEETS.EVENTS))
-    .filter((eventRow) => eventRow.status === 'active')
-    .sort(sortByEventDate_)
-    .map((eventRow) => {
-      const roles = parseEventRoles_(eventRow);
-      const activeAssignments = getActiveAssignmentsForEvent_(eventRow.eventId);
-      return {
-        eventId: eventRow.eventId,
-        eventName: eventRow.eventName,
-        eventDate: normalizeEventDateValue_(eventRow.eventDate),
-        startTime: normalizeEventTimeValue_(eventRow.startTime),
-        endTime: normalizeEventTimeValue_(eventRow.endTime),
-        totalSlots: roles.length,
-        filledSlots: activeAssignments.length
-      };
-    });
-
-  return { events: events };
+  return { events: buildPublicActiveEvents_(readRows_(getSheet_(SHEETS.EVENTS)), readRows_(getSheet_(SHEETS.ASSIGNMENTS))) };
 }
 
 function getEventAvailableRoles(payload) {
@@ -173,25 +169,13 @@ function getEventAvailableRoles(payload) {
   const userId = required_(payload.userId, 'userId required');
   requireUser_(userId);
 
-  const eventRow = requireEvent_(eventId);
+  const events = readRows_(getSheet_(SHEETS.EVENTS));
+  const eventRow = events.find((e) => e.eventId === eventId);
+  if (!eventRow) throw new Error('Event not found');
   if (eventRow.status !== 'active') throw new Error('Event is archived');
 
-  const roles = parseEventRoles_(eventRow);
-  const activeAssignments = getActiveAssignmentsForEvent_(eventId);
-  const takenSlotIds = activeAssignments.map((a) => a.roleSlotId);
-  const currentAssignment = activeAssignments.find((a) => a.userId === userId) || null;
-
-  const availableRoles = roles.filter((role) => takenSlotIds.indexOf(role.roleSlotId) === -1 || (currentAssignment && currentAssignment.roleSlotId === role.roleSlotId));
-
-  return {
-    event: publicEvent_(eventRow),
-    availableRoles: availableRoles,
-    currentAssignment: currentAssignment ? {
-      assignmentId: currentAssignment.assignmentId,
-      roleSlotId: currentAssignment.roleSlotId,
-      roleName: currentAssignment.roleName
-    } : null
-  };
+  const activeAssignments = readRows_(getSheet_(SHEETS.ASSIGNMENTS)).filter((row) => row.eventId === eventId && row.status === 'active');
+  return buildEventRoleDetail_(eventRow, activeAssignments, userId);
 }
 
 function assignUserToRole(payload) {
@@ -232,14 +216,17 @@ function assignUserToRole(payload) {
 
     appendRow_(getSheet_(SHEETS.ASSIGNMENTS), assignment);
     writeAudit_('user', userId, 'assignment_created', 'assignment', assignment.assignmentId, assignment);
-    return { assignmentId: assignment.assignmentId };
+    return Object.assign({ assignmentId: assignment.assignmentId }, buildUserHomeData_(userId));
   } finally {
     lock.releaseLock();
   }
 }
 
 function removeUserAssignment(payload) {
-  return removeAssignmentCore_(payload.userId, payload.assignmentId, 'user', payload.userId);
+  const userId = required_(payload.userId, 'userId required');
+  const assignmentId = required_(payload.assignmentId, 'assignmentId required');
+  removeAssignmentCore_(userId, assignmentId, 'user', userId);
+  return buildUserHomeData_(userId);
 }
 
 function changeUserAssignment(payload) {
@@ -251,6 +238,7 @@ function changeUserAssignment(payload) {
     const fromAssignmentId = required_(payload.fromAssignmentId, 'fromAssignmentId required');
     const toRoleSlotId = required_(payload.toRoleSlotId, 'toRoleSlotId required');
 
+    requireUser_(userId);
     const assignmentRow = requireAssignment_(fromAssignmentId);
     if (assignmentRow.userId !== userId || assignmentRow.eventId !== eventId || assignmentRow.status !== 'active') {
       throw new Error('Assignment not valid for change');
@@ -259,11 +247,29 @@ function changeUserAssignment(payload) {
     const eventRow = requireEvent_(eventId);
     if (eventRow.status !== 'active') throw new Error('Event is archived');
 
+    const roles = parseEventRoles_(eventRow);
+    const destinationRole = roles.find((role) => role.roleSlotId === toRoleSlotId);
+    if (!destinationRole) throw new Error('Destination role slot not found');
+    if (assignmentRow.roleSlotId === toRoleSlotId) throw new Error('Assignment is already in that role slot');
+
     const activeAssignments = getActiveAssignmentsForEvent_(eventId);
     if (activeAssignments.some((a) => a.roleSlotId === toRoleSlotId)) throw new Error('New role slot is already filled');
 
-    removeAssignmentCore_(userId, fromAssignmentId, 'user', userId);
-    return assignUserToRole({ userId: userId, eventId: eventId, roleSlotId: toRoleSlotId });
+    updateRow_(getSheet_(SHEETS.ASSIGNMENTS), 'assignmentId', fromAssignmentId, {
+      roleSlotId: destinationRole.roleSlotId,
+      roleName: destinationRole.roleName,
+      assignedAt: nowIso()
+    });
+
+    writeAudit_('user', userId, 'assignment_changed', 'assignment', fromAssignmentId, {
+      eventId: eventId,
+      fromRoleSlotId: assignmentRow.roleSlotId,
+      fromRoleName: assignmentRow.roleName,
+      toRoleSlotId: destinationRole.roleSlotId,
+      toRoleName: destinationRole.roleName
+    });
+
+    return Object.assign({ assignmentId: fromAssignmentId }, buildUserHomeData_(userId));
   } finally {
     lock.releaseLock();
   }
@@ -567,6 +573,100 @@ function removeAssignmentCore_(actorId, assignmentId, actorType, removedBy) {
   return { assignmentId: assignmentId };
 }
 
+function buildUserHomeData_(userId) {
+  const eventsRows = readRows_(getSheet_(SHEETS.EVENTS));
+  const assignmentRows = readRows_(getSheet_(SHEETS.ASSIGNMENTS));
+  const activeAssignments = assignmentRows.filter((row) => row.status === 'active');
+  const eventsById = indexBy_(eventsRows, 'eventId');
+
+  const assignments = activeAssignments
+    .filter((row) => row.userId === userId)
+    .map((row) => {
+      const eventRow = eventsById[row.eventId];
+      if (!eventRow || eventRow.status !== 'active') return null;
+      return {
+        assignmentId: row.assignmentId,
+        eventId: row.eventId,
+        eventName: eventRow.eventName,
+        eventDate: normalizeEventDateValue_(eventRow.eventDate),
+        startTime: normalizeEventTimeValue_(eventRow.startTime),
+        endTime: normalizeEventTimeValue_(eventRow.endTime),
+        roleSlotId: row.roleSlotId,
+        roleName: row.roleName
+      };
+    })
+    .filter(Boolean)
+    .sort(sortByEventDate_);
+
+  return {
+    assignments: assignments,
+    events: buildPublicActiveEvents_(eventsRows, assignmentRows),
+    loadedAt: nowIso()
+  };
+}
+
+function buildPublicActiveEvents_(eventsRows, assignmentRows) {
+  const activeAssignments = assignmentRows.filter((row) => row.status === 'active');
+  const assignmentsByEventId = groupBy_(activeAssignments, 'eventId');
+
+  return eventsRows
+    .filter((eventRow) => eventRow.status === 'active')
+    .sort(sortByEventDate_)
+    .map((eventRow) => {
+      const roles = parseEventRoles_(eventRow);
+      const eventAssignments = assignmentsByEventId[eventRow.eventId] || [];
+      return {
+        eventId: eventRow.eventId,
+        eventName: eventRow.eventName,
+        eventDate: normalizeEventDateValue_(eventRow.eventDate),
+        startTime: normalizeEventTimeValue_(eventRow.startTime),
+        endTime: normalizeEventTimeValue_(eventRow.endTime),
+        totalSlots: roles.length,
+        filledSlots: eventAssignments.length,
+        roles: roles,
+        activeAssignments: eventAssignments.map(publicAssignment_)
+      };
+    });
+}
+
+function buildEventRoleDetail_(eventRow, activeAssignments, userId) {
+  const roles = parseEventRoles_(eventRow);
+  const takenSlotIds = activeAssignments.map((a) => a.roleSlotId);
+  const currentAssignment = activeAssignments.find((a) => a.userId === userId) || null;
+  const availableRoles = roles.filter((role) => takenSlotIds.indexOf(role.roleSlotId) === -1 || (currentAssignment && currentAssignment.roleSlotId === role.roleSlotId));
+
+  return {
+    event: publicEvent_(eventRow),
+    availableRoles: availableRoles,
+    currentAssignment: currentAssignment ? {
+      assignmentId: currentAssignment.assignmentId,
+      roleSlotId: currentAssignment.roleSlotId,
+      roleName: currentAssignment.roleName
+    } : null
+  };
+}
+
+function publicAssignment_(row) {
+  return {
+    assignmentId: row.assignmentId,
+    eventId: row.eventId,
+    userId: row.userId,
+    roleSlotId: row.roleSlotId,
+    roleName: row.roleName,
+    assignedAt: row.assignedAt
+  };
+}
+
+function groupBy_(rows, key) {
+  const out = {};
+  rows.forEach((row) => {
+    const groupKey = row[key];
+    if (!out[groupKey]) out[groupKey] = [];
+    out[groupKey].push(row);
+  });
+  return out;
+}
+
 function publicEvent_(eventRow) {
   return {
     eventId: eventRow.eventId,
@@ -710,15 +810,18 @@ function updateRow_(sheet, keyColumn, keyValue, updates) {
   const keyIndex = headers.indexOf(keyColumn);
   if (keyIndex === -1) throw new Error('Missing key column ' + keyColumn);
 
-  const values = sheet.getDataRange().getValues();
-  for (let r = 1; r < values.length; r++) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) throw new Error('Row not found for ' + keyColumn + '=' + keyValue);
+
+  const values = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+  for (let r = 0; r < values.length; r++) {
     if (String(values[r][keyIndex]) === String(keyValue)) {
       headers.forEach((header, c) => {
         if (Object.prototype.hasOwnProperty.call(updates, header)) {
           values[r][c] = valueForCell_(updates[header]);
         }
       });
-      sheet.getRange(1, 1, values.length, headers.length).setValues(values);
+      sheet.getRange(r + 2, 1, 1, headers.length).setValues([values[r]]);
       return;
     }
   }
