@@ -166,7 +166,22 @@
           </section>
 
           <section class="card">
-            <h2>Users</h2>
+            <h2>User Management</h2>
+            <form id="user-form">
+              <input type="hidden" id="managed-user-id" />
+              <div class="split">
+                <div class="form-row"><label>First Name</label><input id="managed-user-first" required /></div>
+                <div class="form-row"><label>Last Name</label><input id="managed-user-last" required /></div>
+              </div>
+              <div class="form-row"><label>Phone Number</label><input id="managed-user-phone" required autocomplete="tel" /></div>
+              <div class="actions">
+                <button type="submit">Save User</button>
+                <button type="button" id="user-reset" class="secondary">Clear</button>
+              </div>
+            </form>
+            <div id="user-message" class="message"></div>
+            <hr />
+            <h3 class="section-subtitle">Users</h3>
             <div id="users-list" class="list"></div>
           </section>
         </div>
