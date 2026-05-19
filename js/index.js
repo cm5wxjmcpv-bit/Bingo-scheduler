@@ -16,18 +16,36 @@ form?.addEventListener('submit', async (event) => {
     return;
   }
 
+  const submitButton = form.querySelector('button[type="submit"]');
+  const originalButtonText = submitButton?.textContent || 'Continue';
+
   try {
-    setMessage(messageEl, 'Signing in...', 'info');
-    const data = await api.createOrFindUser({ firstName, lastName, phoneRaw: phone });
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = 'Loading events...';
+    }
+    setMessage(messageEl, 'Signing in and loading events...', 'info');
+
+    const data = await api.createOrFindUserWithData({ firstName, lastName, phoneRaw: phone });
     saveStorage(CONFIG.storageKeys.userSession, {
-      userId: data.userId,
+      userId: data.user.userId,
       identityKey: makeIdentityKey(firstName, lastName, phone),
-      firstName: data.firstName,
-      lastName: data.lastName
+      firstName: data.user.firstName,
+      lastName: data.user.lastName,
+      prefetchedHomeData: {
+        assignments: data.assignments || [],
+        events: data.events || [],
+        loadedAt: data.loadedAt || new Date().toISOString()
+      }
     });
-    setMessage(messageEl, 'Success. Redirecting...', 'success');
+
+    setMessage(messageEl, 'Success. Opening events...', 'success');
     window.location.href = './events.html';
   } catch (error) {
     setMessage(messageEl, error.message || 'Unable to sign in.', 'error');
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.textContent = originalButtonText;
+    }
   }
 });

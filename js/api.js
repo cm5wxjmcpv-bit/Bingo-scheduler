@@ -35,6 +35,12 @@ export const api = {
   createOrFindUser(input) {
     return request('createOrFindUser', input);
   },
+  createOrFindUserWithData(input) {
+    return request('createOrFindUserWithData', input);
+  },
+  getUserHomeData(userId) {
+    return request('getUserHomeData', { userId });
+  },
   getUserAssignments(userId) {
     return request('getUserAssignments', { userId });
   },
