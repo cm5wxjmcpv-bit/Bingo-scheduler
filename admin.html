@@ -135,6 +135,22 @@
             <label>Select Event</label>
             <select id="assignment-event-select"></select>
           </div>
+          <form id="admin-add-assignment-form" class="event-card" style="margin-bottom:1rem;">
+            <h3 class="section-subtitle">Add Person to Role</h3>
+            <div class="split">
+              <div class="form-row">
+                <label>Person</label>
+                <select id="assignment-user-select" required></select>
+              </div>
+              <div class="form-row">
+                <label>Open Role</label>
+                <select id="assignment-role-select" required></select>
+              </div>
+            </div>
+            <div class="actions">
+              <button type="submit">Add to Role</button>
+            </div>
+          </form>
           <div id="assignments-list" class="list"></div>
           <div id="assignment-message" class="message"></div>
         </section>
