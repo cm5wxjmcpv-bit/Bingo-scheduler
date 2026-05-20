@@ -1,5 +1,5 @@
 export const CONFIG = {
-  apiBaseUrl: 'https://script.google.com/macros/s/AKfycbzRghrJWKyeFSuUbhNvdgaNb_Ltbnq15EzwMbITwiwRlZJ1ftCIZmoxBgp9xqRy-IA/exec',
+  apiBaseUrl: 'https://script.google.com/macros/s/AKfycbwfxLBIPQSp_ZQ6QokcGhuz_hehk_VLJwGuXajz5dsCF3XGFMEn0__sjINmKrhBelhR/exec',
   requestTimeoutMs: 60000,
   storageKeys: {
     userSession: 'bingoUserSession',
