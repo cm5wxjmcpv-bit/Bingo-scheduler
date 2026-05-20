@@ -5,8 +5,9 @@ async function request(action, payload = {}) {
     throw new Error('Set your Apps Script web app URL in js/config.js first.');
   }
 
+  const timeoutMs = Number(CONFIG.requestTimeoutMs) || 60000;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), CONFIG.requestTimeoutMs);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(CONFIG.apiBaseUrl, {
@@ -26,6 +27,11 @@ async function request(action, payload = {}) {
     }
 
     return data.data;
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error(`The server took longer than ${Math.round(timeoutMs / 1000)} seconds to answer. The change may still have saved. Tap Refresh before trying again.`);
+    }
+    throw error;
   } finally {
     clearTimeout(timeout);
   }
